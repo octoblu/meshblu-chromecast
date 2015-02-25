@@ -10,16 +10,16 @@
     "test": "exit 0"
   },
   "dependencies": {
-    "meshblu": "^1.9.0",
+    "castv2": "^0.1.4",
     "debug": "^2.1.0",
-    "castv2": "^1.3.24",
     "get-youtube-id": "^0.1.3",
     "mdns": "^2.2.6",
+    "meshblu": "^1.9.0",
     "socket.io-client": "^1.3.4"
   },
   "keywords": [
     "meshblu-connector",
-	"chromecast-connector"
+    "chromecast-connector"
   ],
   "bugs": {
     "url": "https://github.com/octoblu/chromecast/issues"
