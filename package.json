@@ -1,0 +1,33 @@
+{
+  "name": "meshblu-chromecast",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/octoblu/chromecast"
+  },
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node command.js",
+    "test": "exit 0"
+  },
+  "dependencies": {
+    "meshblu": "^1.9.0",
+    "debug": "^2.1.0",
+    "castv2": "^1.3.24",
+    "get-youtube-id": "^0.1.3",
+    "mdns": "^2.2.6",
+    "socket.io-client": "^1.3.4"
+  },
+  "keywords": [
+    "meshblu-connector",
+	"chromecast-connector"
+  ],
+  "bugs": {
+    "url": "https://github.com/octoblu/chromecast/issues"
+  },
+  "homepage": "https://github.com/octoblu/chromecast",
+  "description": "A Chromecast Connector for Octoblu",
+  "main": "command.js",
+  "devDependencies": {},
+  "author": "Kiran Kumar S",
+  "license": "MIT"
+}
