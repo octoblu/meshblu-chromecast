@@ -307,7 +307,7 @@ Plugin.prototype.ShootChromecastAppSpecficMessage = function (message, app, clie
                         currentTime: 0, 
                         customData: {
                             payload: {
-                                title: 'Triggred from Octoblu'
+                                title: 'Triggered from Octoblu'
                             }
                         }
                     });
