@@ -1,0 +1,12 @@
+language: node_js
+sudo: false
+node_js:
+- '0.10'
+deploy:
+  provider: npm
+  email: serveradmin@octoblu.com
+  api_key:
+    secure: fAVVejxOR+8BvUwxuM+AmjYsvKlMOtSQY+tdgow7kW2WHSGjjljeNgS5QgIUPLyB++SKefcBUZyoTu9B2E+Y7yyP+1FRpUnnKRCntHEcHRhZjq9SLQ7BgcY7+iUW+VxkX/75I68grsrTFFzGvOF0FmQVKlBwOibpih4pOzxLgYg=
+  on:
+    tags: true
+    repo: octoblu/meshblu-chromecast

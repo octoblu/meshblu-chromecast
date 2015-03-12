@@ -2,7 +2,7 @@
   "name": "meshblu-chromecast",
   "repository": {
     "type": "git",
-    "url": "https://github.com/octoblu/chromecast"
+    "url": "https://github.com/octoblu/meshblu-chromecast"
   },
   "version": "1.0.0",
   "scripts": {
