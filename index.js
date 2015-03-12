@@ -23,10 +23,10 @@ var MESSAGE_SCHEMA = {
         },
         CastingApplication: {
             type: 'string',
-            "enum" : ['youtube', 'DisplayText', 'GotoMeeting' , 'Media', 'CustomApp' ] ,
+            "enum" : ['youtube', 'DisplayText', 'Url' , 'Media', 'CustomApp' ] ,
             required: true
         },
-        url: {
+        youtubeUrl: {
             type: 'string',
             required: true
         },
@@ -34,7 +34,7 @@ var MESSAGE_SCHEMA = {
             type: 'string',
             required: true
         },
-        MeetingID: {
+        Url: {
             type: 'string',
             required: true
         },
@@ -82,14 +82,20 @@ function Plugin(){
 }
 util.inherits(Plugin, EventEmitter);
 
-Plugin.prototype.onMessage = function(message){
-     
-    var self = this;  
+Plugin.prototype.onMessage = function (message) {
     
-    if (this.chromecastFound == false)
-        this.DetectChromecast(message);
-    else
-        this.ondeviceup(GlobalIP, message);
+    var self = this;
+    var _message = null;
+
+    if (message.hasOwnProperty("params"))
+        _message = message.params;
+    else if (message.hasOwnProperty("payload"))
+        _message = message.payload;
+
+   // if (this.chromecastFound == false)
+        this.DetectChromecast(_message);
+   // else
+   //     this.ondeviceup(GlobalIP, message);
   
 };
 
@@ -101,7 +107,7 @@ Plugin.prototype.onConfig = function(device){
 
 Plugin.prototype.setOptions = function (options){
     this.options = options || {};
-    this.DetectChromecast();
+    //this.DetectChromecast(options);
 };
 
 Plugin.prototype.DetectChromecast = function (message) {
@@ -118,28 +124,27 @@ Plugin.prototype.DetectChromecast = function (message) {
      **/
     var browser = mdns.createBrowser(mdns.tcp('googlecast')).on('serviceUp', function (service) {
         
+        console.log(service);
+
         if (message) {
 
-            if ((message.payload.AutoDiscovery == false) && (message.payload.ChromecastName)) {
-                if (message.payload.ChromecastName.toLowerCase() == service.name.toLowerCase()) {
+            if ((message.AutoDiscovery == false) && (message.ChromecastName)) {
+                if (message.ChromecastName.toLowerCase() == service.name.toLowerCase()) {
                     HostIP = service.addresses[0];
                     GlobalIP = service.addresses[0];
                     _self.chromecastFound = true;
+                    _self.emit('message', { devices: ['*'], topic: 'echo', payload: service });
+                    _self.ondeviceup(HostIP, _msg);
                 }
             }
-            else if (message.payload.AutoDiscovery == true) {
+            else if ((message.AutoDiscovery == true) && (_self.chromecastFound == false)) {
                 if (service.hasOwnProperty("name")) {
-                    //  FIXME : Need to implement proper logic, test it with 2 chromecast
-                    // chromecast V1 returns different structure than chromecast V2, need to test with multiple chromecast.
                     HostIP = service.addresses[0];
                     GlobalIP = service.addresses[0];
                     _self.chromecastFound = true;
+                    _self.emit('message', { devices: ['*'], topic: 'echo', payload: service });
+                    _self.ondeviceup(HostIP, _msg);
                 }
-            }
-            
-            if (_self.chromecastFound == true) {
-                _self.emit('message', { devices: ['*'], topic: 'echo', payload: service });
-                _self.ondeviceup(HostIP, _msg);
             }
         }
     });
@@ -216,36 +221,36 @@ Plugin.prototype.ondeviceup = function (host, message) {
 
 Plugin.prototype.GetChromecastApplicationID = function (message) {
     console.log(message);
-    if (message.payload.hasOwnProperty('CastingApplication')) {
-        switch (message.payload.CastingApplication) {
+    if (message.hasOwnProperty('CastingApplication')) {
+        switch (message.CastingApplication) {
             case 'youtube':
                 return '233637DE';
             case 'DisplayText':
                 return '794B7BBF';
-            case 'GotoMeeting':
+            case 'Url':
                 return '7897BA3B';
             case 'Media':
                 return 'CC1AD845';
             case 'CustomApp':
-                return message.payload.AppID;
+                return message.AppID;
         }
     }
  
 }
 
 Plugin.prototype.GetChromecastAppNamespace = function (message) {
-    if (message.payload.hasOwnProperty('CastingApplication')) {
-        switch (message.payload.CastingApplication) {
+    if (message.hasOwnProperty('CastingApplication')) {
+        switch (message.CastingApplication) {
             case 'youtube':
                 return 'urn:x-cast:com.google.youtube.mdx';
             case 'DisplayText':
                 return 'urn:x-cast:com.google.cast.sample.helloworld';
-            case 'GotoMeeting':
+            case 'Url':
                 return 'urn:x-cast:uk.co.splintered.urlcaster';
             case 'Media':
                 return 'urn:x-cast:com.google.cast.media';
             case 'CustomApp':
-                return message.payload.urn;
+                return message.urn;
         }
     }
  
@@ -255,12 +260,12 @@ Plugin.prototype.ShootChromecastAppSpecficMessage = function (message, app, clie
     
     var namespace = this.GetChromecastAppNamespace(message);
     
-    if (message.payload.hasOwnProperty('CastingApplication')) {
-        switch (message.payload.CastingApplication) {
+    if (message.hasOwnProperty('CastingApplication')) {
+        switch (message.CastingApplication) {
             case 'youtube':
-                if (message.payload.hasOwnProperty('url')) {
+                if (message.hasOwnProperty('youtubeUrl')) {
                     // var link = 'https://www.youtube.com/watch?v=0vxOhd4qlnA';
-                    var youtubeId = getYouTubeId(message.payload.url);
+                    var youtubeId = getYouTubeId(message.youtubeUrl);
                     var url = client.createChannel('client-13243', app.transportId, namespace, 'JSON');
                     url.send({
                         type: 'flingVideo',
@@ -273,28 +278,28 @@ Plugin.prototype.ShootChromecastAppSpecficMessage = function (message, app, clie
                 break;
 
             case 'DisplayText':
-                if (message.payload.hasOwnProperty('Message')) {
+                if (message.hasOwnProperty('Message')) {
                     var url = client.createChannel('client-13243', app.transportId, namespace);
-                    url.send(message.payload.Message);
+                    url.send(message.Message);
                 }
                 break;
 
-            case 'GotoMeeting':
-                if (message.payload.hasOwnProperty('MeetingID')) {
+            case 'Url':
+                if (message.hasOwnProperty('MeetingID')) {
                     var url = client.createChannel('client-13243', app.transportId, namespace);
-                    url.send(message.payload.MeetingID);
+                    url.send(message.Url);
                 }
                 break;
 
             case 'Media':
-                if (message.payload.hasOwnProperty('MediaURL')) {
+                if (message.hasOwnProperty('MediaURL')) {
                     var url = client.createChannel('client-13243', app.transportId, namespace, 'JSON');
                     url.send({
                         type: 'LOAD', 
                         requestId: 77063063, 
                         sessionId: app.sessionId, 
                         media: {
-                            contentId: message.payload.MediaURL, 
+                            contentId: message.MediaURL, 
                             streamType: 'LIVE', 
                             contentType: 'video/mp4'
                         }, 
