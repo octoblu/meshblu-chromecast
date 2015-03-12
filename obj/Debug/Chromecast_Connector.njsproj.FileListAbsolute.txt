@@ -1,2 +1,0 @@
-C:\Projects\chromecast-connector\chromecast\bin\Microsoft.NodejsTools.WebRole.dll
-C:\Projects\chromecast-connector\chromecast\obj\Debug\Chromecast_Connector.njsprojResolveAssemblyReference.cache
