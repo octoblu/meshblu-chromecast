@@ -4,7 +4,7 @@
     "type": "git",
     "url": "https://github.com/octoblu/meshblu-chromecast"
   },
-  "version": "1.0.3",
+  "version": "1.1.0",
   "scripts": {
     "start": "node command.js",
     "test": "exit 0"
