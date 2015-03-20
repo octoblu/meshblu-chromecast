@@ -101,7 +101,7 @@ Plugin.prototype.setupChromecast = function() {
   debug('Setting up chromecast....');
 };
 
-Plugin.prototype.detectChromecast = function (message) {
+Plugin.prototype.detectChromecastImmediately = function (message) {
   var self = this,
     pluginName = self.options.ChromecastName,
     autodiscovery = self.options.AutoDiscovery;
@@ -118,7 +118,9 @@ Plugin.prototype.detectChromecast = function (message) {
   browser.start();
 };
 
- Plugin.prototype.sendMessageToDevice = function (message, service) {
+Plugin.prototype.detectChromecast = _.debounce(Plugin.prototype.detectChromecastImmediately, 1000);
+
+Plugin.prototype.sendMessageToDevice = function (message, service) {
   debug('sendMessageToDevice', 'Casting...');
 
   var hostIP = service.addresses[0];
@@ -159,17 +161,20 @@ Plugin.prototype.sendMessageToClient = function(message){
   }, 5000);
 
   receiver.on('message', function (data, broadcast) {
-    debug('chromecast on message', data);
+    debug('chromecast ReceiverMessage', JSON.stringify(data));
     if (data.requestId === self.requestId) {
+      debug('data requestId');
+      debug('self requestId');
       if ('APP_AVAILABLE' === data.availability[APPID]) {
-        debug('app is available');
-        // console.log(data);
+        debug('app is available', data.availability[APPID]);
         launchRequestId = self.requestId;
         debug('request id', self.requestId);
         receiver.send({ type: 'LAUNCH', appId: APPID, requestId: self.requestId++ });
       }
     }else if (data.requestId == launchRequestId) {
+      // data requestId and self requestId are diff
       debug('handling launch response...');
+      debug('launchRequestId', launchRequestId);
       var app = _.find(data.status.applications, {appId: APPID})
       if(_.isEmpty(app)) return;
       var mySenderConnection = self.client.createChannel('client-13243', app.transportId, 'urn:x-cast:com.google.cast.tp.connection', 'JSON');
