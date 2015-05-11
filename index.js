@@ -1,321 +1,282 @@
 'use strict';
 var util = require('util');
 var EventEmitter = require('events').EventEmitter;
-var debug = require('debug')('chromecast')
+var debug = require('debug')('meshblu-chromecast')
 var Client = require('castv2').Client;
 var mdns = require('mdns');
 var io = require('socket.io-client')
 var getYouTubeId = require('get-youtube-id');
 var chromecastFound;
-var GlobalIP;
-
+var _ = require('lodash');
 
 var MESSAGE_SCHEMA = {
-    type: 'object',
-    properties: {
-        AutoDiscovery: {
-            type: 'boolean',
-            required: true
-        },
-        ChromecastName: {
-            type: 'string',
-            required: true
-        },
-        CastingApplication: {
-            type: 'string',
-            "enum" : ['youtube', 'DisplayText', 'GotoMeeting' , 'Media', 'CustomApp' ] ,
-            required: true
-        },
-        url: {
-            type: 'string',
-            required: true
-        },
-        Message: {
-            type: 'string',
-            required: true
-        },
-        MeetingID: {
-            type: 'string',
-            required: true
-        },
-        MediaURL: {
-            type: 'string',
-            required: true
-        },
-        AppID: {
-            type: 'string',
-            required: true
-        },
-        urn: {
-            type: 'string',
-            required: true
-        },
-        payload: {
-            type: 'string',
-            required: true
-        }
-    } 
+  type: 'object',
+  properties: {
+    CastingApplication: {
+      type: 'string',
+      "enum" : ['youtube', 'DisplayText', 'Url' , 'Media', 'CustomApp' ] ,
+      required: true
+    },
+    youtubeUrl: {
+      type: 'string',
+      required: true
+    },
+    Message: {
+      type: 'string',
+      required: true
+    },
+    Url: {
+      type: 'string',
+      required: true
+    },
+    MediaURL: {
+      type: 'string',
+      required: true
+    },
+    AppID: {
+      type: 'string',
+      required: true
+    },
+    urn: {
+      type: 'string',
+      required: true
+    },
+    payload: {
+      type: 'string',
+      required: true
+    }
+  }
 };
 
 var OPTIONS_SCHEMA = {
-    type: 'object',
-    properties: {
-        AutoDiscovery: {
-            type: 'boolean',
-            required: true
-        },
-        ChromecastName: {
-            type: 'string',
-            required: true
-        }
+  type: 'object',
+  properties: {
+    AutoDiscovery: {
+      type: 'boolean',
+      required: true
+    },
+    ChromecastName: {
+      type: 'string',
+      required: true
     }
+  }
 };
 
-
-
+var doesMatchPluginSerivce = function(pluginName, serviceName){
+  if(!pluginName || !serviceName) return;
+  return pluginName.toLowerCase() === serviceName.toLowerCase;
+};
 
 function Plugin(){
-  this.options = {};
-  this.messageSchema = MESSAGE_SCHEMA;
-  this.optionsSchema = OPTIONS_SCHEMA;
-  return this;
+  var self = this;
+  self.options = {};
+  self.messageSchema = MESSAGE_SCHEMA;
+  self.optionsSchema = OPTIONS_SCHEMA;
+  self.requestId = 1443;
+  return self;
 }
+
 util.inherits(Plugin, EventEmitter);
 
-Plugin.prototype.onMessage = function(message){
-     
-    var self = this;  
-    
-    if (this.chromecastFound == false)
-        this.DetectChromecast(message);
-    else
-        this.ondeviceup(GlobalIP, message);
-  
+Plugin.prototype.onMessage = function (message) {
+  debug('onMessage', message);
+
+  if (!message.payload) return;
+
+  this.detectChromecast(message.payload);
 };
 
-
-							  
 Plugin.prototype.onConfig = function(device){
-  this.setOptions(device.options||{});
+  debug('onConfig');
+
+  this.setOptions(device.options || {});
+  this.setupChromecast();
 };
 
 Plugin.prototype.setOptions = function (options){
-    this.options = options || {};
-    this.DetectChromecast();
+  this.options = options || {};
 };
 
-Plugin.prototype.DetectChromecast = function (message) {
-      
-    this.chromecastFound = false;
-    var _self = this;
-    var HostIP;
-    var _msg = message;
-    
-    
-    /**
-     * Google Chromecast uses mdns Service named googlecast as advertisement.
-     * 
-     **/
-    var browser = mdns.createBrowser(mdns.tcp('googlecast')).on('serviceUp', function (service) {
-        
-        if (message) {
-
-            if ((message.payload.AutoDiscovery == false) && (message.payload.ChromecastName)) {
-                if (message.payload.ChromecastName.toLowerCase() == service.name.toLowerCase()) {
-                    HostIP = service.addresses[0];
-                    GlobalIP = service.addresses[0];
-                    _self.chromecastFound = true;
-                }
-            }
-            else if (message.payload.AutoDiscovery == true) {
-                if (service.hasOwnProperty("name")) {
-                    //  FIXME : Need to implement proper logic, test it with 2 chromecast
-                    // chromecast V1 returns different structure than chromecast V2, need to test with multiple chromecast.
-                    HostIP = service.addresses[0];
-                    GlobalIP = service.addresses[0];
-                    _self.chromecastFound = true;
-                }
-            }
-            
-            if (_self.chromecastFound == true) {
-                _self.emit('message', { devices: ['*'], topic: 'echo', payload: service });
-                _self.ondeviceup(HostIP, _msg);
-            }
-        }
-    });
-
-    browser.start();
+Plugin.prototype.setupChromecast = function() {
+  debug('Setting up chromecast....');
 };
 
+Plugin.prototype.detectChromecastImmediately = function (message) {
+  var self = this,
+    pluginName = self.options.ChromecastName,
+    autodiscovery = self.options.AutoDiscovery;
 
+  if(!autodiscovery && !pluginName) return;
 
-Plugin.prototype.ondeviceup = function (host, message) {
-    
-    var APPID = this.GetChromecastApplicationID(message);
-    var client = new Client();
-    var _self = this;
-    
-
-    client.connect(host, function () {
-        // Google Chromecast various namespace handlers for initializing connection.
-        var connection = client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.tp.connection', 'JSON');
-        var heartbeat = client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.tp.heartbeat', 'JSON');
-        var receiver = client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.receiver', 'JSON');
-        
-        
-        var requestId = 1443;
-        var _transportId;
-        var launchRequestId;
-        
-        
-        // establish virtual connection to the receiver
-        connection.send({ type: 'CONNECT' });
-        
-        
-        // Check first if the app is avaliable.
-        receiver.send({ type: 'GET_APP_AVAILABILITY', appId: [APPID], requestId: requestId });
-        
-        
-        // start heartbeating
-        setInterval(function () {
-            heartbeat.send({ type: 'PING' });
-        }, 5000);
-        
-        
-        receiver.on('message', function (data, broadcast) {
-            
-            if (data.type = 'RECEIVER_STATUS') {
-                if (data.requestId == requestId) {
-                    if ('APP_AVAILABLE' === data.availability[APPID]) {
-                        console.log(data);
-                        launchRequestId = requestId;
-                        receiver.send({ type: 'LAUNCH', appId: APPID, requestId: requestId++ });
-                    }
-                }
-                else if (data.requestId == launchRequestId) {
-                    {
-                        console.log('Handling LAUNCH response...');
-                        data.status.applications.forEach(function (app) {
-                            if (APPID === app.appId) {
-                                console.log(app);
-                                _transportId = app.transportId;
-                                console.log('Discovered transportId: ' + _transportId);
-                                var mySenderConnection = client.createChannel('client-13243', app.transportId, 'urn:x-cast:com.google.cast.tp.connection', 'JSON');
-                                mySenderConnection.send({ type: 'CONNECT' });
-                                _self.ShootChromecastAppSpecficMessage(message, app, client);
-                            }
-                        });
-                    }
-                    console.log(data.status);
-                }
-            }
-        });
-    });
-
-}
-
-Plugin.prototype.GetChromecastApplicationID = function (message) {
-    console.log(message);
-    if (message.payload.hasOwnProperty('CastingApplication')) {
-        switch (message.payload.CastingApplication) {
-            case 'youtube':
-                return '233637DE';
-            case 'DisplayText':
-                return '794B7BBF';
-            case 'GotoMeeting':
-                return '7897BA3B';
-            case 'Media':
-                return 'CC1AD845';
-            case 'CustomApp':
-                return message.payload.AppID;
-        }
+  var browser = mdns.createBrowser(mdns.tcp('googlecast')).on('serviceUp', function (chromecast) {
+    self.chromecast = chromecast;
+    if (autodiscovery || doesMatchPluginSerivce(pluginName, self.chromecast.name)) {
+      return self.sendMessageToDevice(message, self.chromecast);
     }
- 
+  });
+
+  browser.start();
+};
+
+Plugin.prototype.detectChromecast = _.debounce(Plugin.prototype.detectChromecastImmediately, 1000);
+
+Plugin.prototype.sendMessageToDevice = function (message, service) {
+  debug('sendMessageToDevice', 'Casting...');
+
+  var hostIP = service.addresses[0];
+
+  // this.emit('message', { devices: ['*'], topic: 'echo', payload: service });
+  this.onDeviceUp(hostIP, message);
 }
 
-Plugin.prototype.GetChromecastAppNamespace = function (message) {
-    if (message.payload.hasOwnProperty('CastingApplication')) {
-        switch (message.payload.CastingApplication) {
-            case 'youtube':
-                return 'urn:x-cast:com.google.youtube.mdx';
-            case 'DisplayText':
-                return 'urn:x-cast:com.google.cast.sample.helloworld';
-            case 'GotoMeeting':
-                return 'urn:x-cast:uk.co.splintered.urlcaster';
-            case 'Media':
-                return 'urn:x-cast:com.google.cast.media';
-            case 'CustomApp':
-                return message.payload.urn;
-        }
+Plugin.prototype.onDeviceUp = function (host, message) {
+  debug('onDeviceUp', message);
+  var self = this;
+  self.client = new Client();
+
+  self.client.connect(host, function () {
+    self.sendMessageToClient(message);
+  });
+}
+
+Plugin.prototype.sendMessageToClient = function(message){
+  var self = this;
+  var APPID = this.getChromecastApplicationID(message);
+  // Google Chromecast various namespace handlers for initializing connection.
+  var connection = self.client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.tp.connection', 'JSON');
+  var heartbeat = self.client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.tp.heartbeat', 'JSON');
+  var receiver = self.client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.receiver', 'JSON');
+
+  var launchRequestId;
+
+  // establish virtual connection to the receiver
+  connection.send({ type: 'CONNECT' });
+
+  // Check first if the app is avaliable.
+  receiver.send({ type: 'GET_APP_AVAILABILITY', appId: [APPID], requestId: self.requestId });
+
+  // start heartbeating
+  setInterval(function () {
+    heartbeat.send({ type: 'PING' });
+  }, 5000);
+
+  receiver.on('message', function (data, broadcast) {
+    debug('chromecast ReceiverMessage', JSON.stringify(data));
+    if (data.requestId === self.requestId) {
+      debug('data requestId');
+      debug('self requestId');
+      if ('APP_AVAILABLE' === data.availability[APPID]) {
+        debug('app is available', data.availability[APPID]);
+        launchRequestId = self.requestId;
+        debug('request id', self.requestId);
+        receiver.send({ type: 'LAUNCH', appId: APPID, requestId: self.requestId++ });
+      }
+    }else if (data.requestId == launchRequestId) {
+      // data requestId and self requestId are diff
+      debug('handling launch response...');
+      debug('launchRequestId', launchRequestId);
+      var app = _.find(data.status.applications, {appId: APPID})
+      if(_.isEmpty(app)) return;
+      var mySenderConnection = self.client.createChannel('client-13243', app.transportId, 'urn:x-cast:com.google.cast.tp.connection', 'JSON');
+      mySenderConnection.send({ type: 'CONNECT' });
+      self.sendChromecastAppSpecficMessage(message, app, self.client);
     }
- 
-}
+  });
+};
 
-Plugin.prototype.ShootChromecastAppSpecficMessage = function (message, app, client) {
-    
-    var namespace = this.GetChromecastAppNamespace(message);
-    
-    if (message.payload.hasOwnProperty('CastingApplication')) {
-        switch (message.payload.CastingApplication) {
-            case 'youtube':
-                if (message.payload.hasOwnProperty('url')) {
-                    // var link = 'https://www.youtube.com/watch?v=0vxOhd4qlnA';
-                    var youtubeId = getYouTubeId(message.payload.url);
-                    var url = client.createChannel('client-13243', app.transportId, namespace, 'JSON');
-                    url.send({
-                        type: 'flingVideo',
-                        data: {
-                            currentTime: 0,
-                            videoId: youtubeId
-                        }
-                    });
-                }
-                break;
+Plugin.prototype.getChromecastApplicationID = function (message) {
+  debug('getChromecastApplicationID');
 
-            case 'DisplayText':
-                if (message.payload.hasOwnProperty('Message')) {
-                    var url = client.createChannel('client-13243', app.transportId, namespace);
-                    url.send(message.payload.Message);
-                }
-                break;
-
-            case 'GotoMeeting':
-                if (message.payload.hasOwnProperty('MeetingID')) {
-                    var url = client.createChannel('client-13243', app.transportId, namespace);
-                    url.send(message.payload.MeetingID);
-                }
-                break;
-
-            case 'Media':
-                if (message.payload.hasOwnProperty('MediaURL')) {
-                    var url = client.createChannel('client-13243', app.transportId, namespace, 'JSON');
-                    url.send({
-                        type: 'LOAD', 
-                        requestId: 77063063, 
-                        sessionId: app.sessionId, 
-                        media: {
-                            contentId: message.payload.MediaURL, 
-                            streamType: 'LIVE', 
-                            contentType: 'video/mp4'
-                        }, 
-                        autoplay: true, 
-                        currentTime: 0, 
-                        customData: {
-                            payload: {
-                                title: 'Triggred from Octoblu'
-                            }
-                        }
-                    });
-                }
-                break;
-            case 'CustomApp':
-            //FIXME
-        }
+  if (_.has(message, 'CastingApplication')) {
+    switch (message.CastingApplication) {
+      case 'youtube':
+      return '233637DE';
+      case 'DisplayText':
+      return '794B7BBF';
+      case 'Url':
+      return '7897BA3B';
+      case 'Media':
+      return 'CC1AD845';
+      case 'CustomApp':
+      return message.AppID;
     }
- 
+  }
 }
 
+Plugin.prototype.getChromecastAppNamespace = function (message) {
+  if (_.has(message, 'CastingApplication')) {
+    switch (message.CastingApplication) {
+      case 'youtube':
+      return 'urn:x-cast:com.google.youtube.mdx';
+      case 'DisplayText':
+      return 'urn:x-cast:com.google.cast.sample.helloworld';
+      case 'Url':
+      return 'urn:x-cast:uk.co.splintered.urlcaster';
+      case 'Media':
+      return 'urn:x-cast:com.google.cast.media';
+      case 'CustomApp':
+      return message.urn;
+    }
+  }
 
+}
+
+Plugin.prototype.sendChromecastAppSpecficMessage = function (message, app, client) {
+  debug('sending chromecast a specific message');
+  var self = this;
+  var namespace = self.getChromecastAppNamespace(message);
+
+  if (!_.has(message, 'CastingApplication')) {
+    return;
+  }
+  switch (message.CastingApplication) {
+    case 'youtube':
+      if(!_.has(message, 'youtubeUrl')){ return; }
+      // var link = 'https://www.youtube.com/watch?v=0vxOhd4qlnA';
+      var youtubeId = getYouTubeId(message.youtubeUrl);
+      debug('Sending Youtube', message.youtubeUrl, youtubeId);
+      var url = client.createChannel('client-13243', app.transportId, namespace, 'JSON');
+      url.send({
+        type: 'flingVideo',
+        data: {
+          currentTime: 0,
+          videoId: youtubeId
+        }
+      });
+      break;
+    case 'DisplayText':
+      if(!_.has(message, 'Message')){ return; }
+      var url = client.createChannel('client-13243', app.transportId, namespace);
+      url.send(message.Message);
+      break;
+    case 'Url':
+      if(!_.has(message, 'MeetingID')){ return; }
+      var url = client.createChannel('client-13243', app.transportId, namespace);
+      url.send(message.Url);
+      break;
+    case 'Media':
+      if(!_.has(message, 'MediaURL')){ return; }
+      var url = client.createChannel('client-13243', app.transportId, namespace, 'JSON');
+      url.send({
+        type: 'LOAD',
+        requestId: 77063063,
+        sessionId: app.sessionId,
+        media: {
+          contentId: message.MediaURL,
+          streamType: 'LIVE',
+          contentType: 'video/mp4'
+        },
+        autoplay: true,
+        currentTime: 0,
+        customData: {
+          payload: {
+            title: 'Triggered from Octoblu'
+          }
+        }
+      });
+      break;
+  }
+}
 module.exports = {
   messageSchema: MESSAGE_SCHEMA,
   optionsSchema: OPTIONS_SCHEMA,

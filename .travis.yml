@@ -1,0 +1,14 @@
+language: node_js
+node_js:
+- '0.10'
+before_install:
+- sudo apt-get update -qq
+- sudo apt-get install -qq libavahi-compat-libdnssd-dev
+deploy:
+  provider: npm
+  email: serveradmin@octoblu.com
+  api_key:
+    secure: h6rOJusv9xmh2Y8IL6cG6Jqe27s+G+k/nCMPxn1jMMw7txVN5kIvxlKDYte+Io9hzzCDu6ZoXz0lgXAU83CQMlxIdAq1sECQUlaptErE6vxTHoncNYK/96kJBhXn+R+oqXtuZx2oQaBXzP/RcYaWXSkUq5Iuj9JFf3lbiM2xTbE=
+  on:
+    tags: true
+    repo: octoblu/meshblu-chromecast
