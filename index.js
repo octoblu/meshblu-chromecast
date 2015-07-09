@@ -64,7 +64,7 @@ var OPTIONS_SCHEMA = {
 
 var doesMatchPluginSerivce = function(pluginName, serviceName){
   if(!pluginName || !serviceName) return;
-  return pluginName.toLowerCase() === serviceName.toLowerCase;
+  return pluginName.toLowerCase() === serviceName.toLowerCase();
 };
 
 function Plugin(){
