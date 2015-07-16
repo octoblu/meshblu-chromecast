@@ -4,9 +4,7 @@ var EventEmitter = require('events').EventEmitter;
 var debug = require('debug')('meshblu-chromecast')
 var Client = require('castv2').Client;
 var mdns = require('mdns');
-var io = require('socket.io-client')
 var getYouTubeId = require('get-youtube-id');
-var chromecastFound;
 var _ = require('lodash');
 
 var MESSAGE_SCHEMA = {
@@ -64,7 +62,7 @@ var OPTIONS_SCHEMA = {
 
 var doesMatchPluginSerivce = function(pluginName, serviceName){
   if(!pluginName || !serviceName) return;
-  return pluginName.toLowerCase() === serviceName.toLowerCase;
+  return pluginName.toLowerCase() === serviceName.toLowerCase();
 };
 
 function Plugin(){
@@ -81,51 +79,52 @@ util.inherits(Plugin, EventEmitter);
 Plugin.prototype.onMessage = function (message) {
   debug('onMessage', message);
 
-  if (!message.payload) return;
+  if (!message.payload) return debug('no payload in message');
 
   this.detectChromecast(message.payload);
 };
 
 Plugin.prototype.onConfig = function(device){
-  debug('onConfig');
+  debug('onConfig', device.options);
 
   this.setOptions(device.options || {});
-  this.setupChromecast();
 };
 
 Plugin.prototype.setOptions = function (options){
   this.options = options || {};
 };
 
-Plugin.prototype.setupChromecast = function() {
-  debug('Setting up chromecast....');
-};
-
 Plugin.prototype.detectChromecastImmediately = function (message) {
+  debug('detecting chromecast');
   var self = this,
     pluginName = self.options.ChromecastName,
     autodiscovery = self.options.AutoDiscovery;
 
-  if(!autodiscovery && !pluginName) return;
-
-  var browser = mdns.createBrowser(mdns.tcp('googlecast')).on('serviceUp', function (chromecast) {
-    self.chromecast = chromecast;
-    if (autodiscovery || doesMatchPluginSerivce(pluginName, self.chromecast.name)) {
-      return self.sendMessageToDevice(message, self.chromecast);
-    }
-  });
+  if(!autodiscovery && !pluginName) return debug('no plugin name or autodiscovery set');
+  debug('connecting to browser');
+  var browser = mdns.createBrowser(mdns.tcp('googlecast'))
+    .on('serviceUp', function (chromecast) {
+      debug('chromecast service up', chromecast.name);
+      if (autodiscovery){
+        debug('autodiscovery');
+      } else if (doesMatchPluginSerivce(pluginName, chromecast.name)){
+        debug('found chromecast by name', pluginName);
+      } else {
+        return;
+      }
+      self.chromecast = chromecast;
+      self.sendMessageToDevice(message);
+    });
 
   browser.start();
 };
 
 Plugin.prototype.detectChromecast = _.debounce(Plugin.prototype.detectChromecastImmediately, 1000);
 
-Plugin.prototype.sendMessageToDevice = function (message, service) {
+Plugin.prototype.sendMessageToDevice = function (message) {
   debug('sendMessageToDevice', 'Casting...');
+  var hostIP = this.chromecast.addresses[0];
 
-  var hostIP = service.addresses[0];
-
-  // this.emit('message', { devices: ['*'], topic: 'echo', payload: service });
   this.onDeviceUp(hostIP, message);
 }
 
@@ -143,12 +142,17 @@ Plugin.prototype.sendMessageToClient = function(message){
   var self = this;
   var APPID = this.getChromecastApplicationID(message);
   // Google Chromecast various namespace handlers for initializing connection.
+
   var connection = self.client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.tp.connection', 'JSON');
   var heartbeat = self.client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.tp.heartbeat', 'JSON');
   var receiver = self.client.createChannel('sender-0', 'receiver-0', 'urn:x-cast:com.google.cast.receiver', 'JSON');
 
   var launchRequestId;
 
+  if(!connection){
+    debug('no connection');
+    return;
+  }
   // establish virtual connection to the receiver
   connection.send({ type: 'CONNECT' });
 
@@ -162,13 +166,12 @@ Plugin.prototype.sendMessageToClient = function(message){
 
   receiver.on('message', function (data, broadcast) {
     debug('chromecast ReceiverMessage', JSON.stringify(data));
+    debug('data requestId', data.requestId);
+    debug('self requestId', self.requestId);
     if (data.requestId === self.requestId) {
-      debug('data requestId');
-      debug('self requestId');
       if ('APP_AVAILABLE' === data.availability[APPID]) {
         debug('app is available', data.availability[APPID]);
         launchRequestId = self.requestId;
-        debug('request id', self.requestId);
         receiver.send({ type: 'LAUNCH', appId: APPID, requestId: self.requestId++ });
       }
     }else if (data.requestId == launchRequestId) {
@@ -250,7 +253,7 @@ Plugin.prototype.sendChromecastAppSpecficMessage = function (message, app, clien
       url.send(message.Message);
       break;
     case 'Url':
-      if(!_.has(message, 'MeetingID')){ return; }
+      if(!_.has(message, 'Url') && !_.has(message, 'MeetingID')){ return; }
       var url = client.createChannel('client-13243', app.transportId, namespace);
       url.send(message.Url);
       break;
