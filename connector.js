@@ -1,62 +1,107 @@
 'use strict';
 var Plugin = require('./index').Plugin;
+var util = require('util');
+var EventEmitter = require('events').EventEmitter;
 var meshblu = require('meshblu');
+var bind = function(fn, me){ return function(){ return fn.apply(me, arguments); }; }
 
-var Connector = function(config) {
-  var conx = meshblu.createConnection({
-    server : config.server,
-    port   : config.port,
-    uuid   : config.uuid,
-    token  : config.token
+var Connector = function(config){
+  var self = this;
+  self.config = config;
+  self.createConnection = bind(self.createConnection, self);
+  self.onReady = bind(self.onReady, self);
+  self.onMessage = bind(self.onMessage, self);
+  self.onConfig = bind(self.onConfig, self);
+  self.run = bind(self.run, self);
+  self.emitError = bind(self.emitError, self);
+  if(!process){
+    return;
+  }
+  process.on('uncaughtException', function(error){
+    self.emitError(error);
+    process.exit(1);
   });
+  return self;
+};
 
-  var consoleError = function(error) {
-    console.error(error.message);
-    console.error(error.stack);
-  };
+util.inherits(Connector, EventEmitter);
 
-  process.on('uncaughtException', consoleError);
-  conx.on('notReady', consoleError);
-  conx.on('error', consoleError);
+Connector.prototype.createConnection = function(){
+  var self = this;
+  self.conx = meshblu.createConnection({
+    server : self.config.server,
+    port   : self.config.port,
+    uuid   : self.config.uuid,
+    token  : self.config.token
+  });
+  self.conx.on('notReady', self.emitError);
+  self.conx.on('error', self.emitError);
 
-  var plugin = new Plugin();
+  self.conx.on('ready', self.onReady);
+  self.conx.on('message', self.onMessage);
+  self.conx.on('config', self.onConfig);
+};
 
-  conx.on('ready', function(){
-    conx.whoami({uuid: config.uuid}, function(device){
-      plugin.setOptions(device.options || {});
-      conx.update({
-        uuid: config.uuid,
-        token: config.token,
-        messageSchema: plugin.messageSchema,
-        optionsSchema: plugin.optionsSchema,
-        options:       plugin.options
-      });
+Connector.prototype.onConfig = function(device){
+  var self = this;
+  self.emit('config', device);
+  try{
+    self.plugin.onConfig.apply(self.plugin, arguments);
+  }catch(error){
+    self.emitError(error);
+  }
+};
+
+Connector.prototype.onMessage = function(message){
+  var self = this;
+  self.emit('message.recieve', message);
+  try{
+    self.plugin.onMessage.apply(self.plugin, arguments);
+  }catch(error){
+    self.emitError(error);
+  }
+};
+
+Connector.prototype.onReady = function(){
+  var self = this;
+  self.conx.whoami({uuid: self.config.uuid}, function(device){
+    self.plugin.setOptions(device.options || {});
+    self.conx.update({
+      uuid:          self.config.uuid,
+      token:         self.config.token,
+      messageSchema: self.plugin.messageSchema,
+      optionsSchema: self.plugin.optionsSchema,
+      options:       self.plugin.options,
+      initializing:  false
     });
   });
+};
 
-  conx.on('message', function(){
-    try {
-      plugin.onMessage.apply(plugin, arguments);
-    } catch (error){
-      console.error(error.message);
-      console.error(error.stack);
-    }
+Connector.prototype.run = function(){
+  var self = this;
+  self.plugin = new Plugin();
+  self.createConnection()
+  self.plugin.on('data', function(data){
+    self.emit('data.send', data);
+    self.conx.data(data);
   });
 
-  conx.on('config', function(){
-    try {
-      plugin.onConfig.apply(plugin, arguments);
-    } catch (error){
-      console.error(error.message);
-      console.error(error.stack);
-    }
+  self.plugin.on('error', self.emitError);
+
+  self.plugin.on('update', function(properties){
+    self.emit('update', properties);
+    self.conx.update(properties);
   });
 
-  plugin.on('message', function(message){
-    conx.message(message);
+  self.plugin.on('message', function(message){
+    self.emit('message.send', message);
+    self.conx.message(message);
   });
+};
 
-  plugin.on('error', consoleError);
+Connector.prototype.emitError = function(error){
+  var self = this;
+  self.emit('error', error);
 };
 
 module.exports = Connector;
