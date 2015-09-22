@@ -1,8 +1,12 @@
 ## meshblu-chromecast
 
-A Meshblu connector for use in Octoblu or with other services.
+[![Build Status](https://travis-ci.org/octoblu/meshblu-chromecast.svg?branch=master)](https://travis-ci.org/octoblu/meshblu-chromecast)
+[![Code Climate](https://codeclimate.com/github/octoblu/meshblu-chromecast/badges/gpa.svg)](https://codeclimate.com/github/octoblu/meshblu-chromecast)
+[![Test Coverage](https://codeclimate.com/github/octoblu/meshblu-chromecast/badges/coverage.svg)](https://codeclimate.com/github/octoblu/meshblu-chromecast)
+[![npm version](https://badge.fury.io/js/meshblu-chromecast.svg)](http://badge.fury.io/js/meshblu-chromecast)
+[![Gitter](https://badges.gitter.im/octoblu/help.svg)](https://gitter.im/octoblu/help)
 
-https://github.com/Pat-Carter/stream2chromecast/blob/master/pychromecast/config.py
+A Meshblu connector for use in Octoblu or with other services.
 
 ### Setup Instructions
 
